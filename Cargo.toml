@@ -1,0 +1,16 @@
+[package]
+name = "test-serial"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.75"
+clap = "4.4.5"
+futures = "0.3.28"
+rustyline-async = "0.4.0"
+serialport = "4.2.2"
+tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "sync"] }
+bluest = { version = "0.6", features = ["serde"] }
+btleplug = { version = "0.11", features = ["serde"] }
