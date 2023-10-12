@@ -58,17 +58,25 @@ pub fn btlescan() {
                 .find(|c| c.properties.contains(CharPropFlags::NOTIFY))
                 .unwrap();
             light.subscribe(&cmd_char).await.unwrap();
-            let mut notification_stream = light.notifications().await.unwrap().take(1);
-            light
-                .write(
-                    &cmd_char,
-                    b"<22020001,REQ,1234>",
-                    btleplug::api::WriteType::WithResponse,
-                )
-                .await
-                .unwrap();
-            while let Some(data) = notification_stream.next().await {
-                println!("Received data from {:?}", String::from_utf8(data.value));
+            let mut notification_stream = light.notifications().await.unwrap();
+
+            loop {
+                tokio::select! {
+                    Some(data) = notification_stream.next() => {
+                        println!("Received data from {:?}", String::from_utf8(data.value));
+                    }
+                    _ = tokio::time::sleep(tokio::time::Duration::from_millis(700)) => {
+                        light
+                            .write(
+                                &cmd_char,
+                                b"<22020001,REQ,1234>",
+                                btleplug::api::WriteType::WithResponse,
+                            )
+                            .await
+                            .unwrap();
+                        continue
+                    }
+                }
             }
             // Each adapter has an event stream, we fetch via events(),
             // simplifying the type, this will return what is essentially a
