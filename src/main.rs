@@ -8,7 +8,9 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::Notify;
+// use tokio::net::UdpSocket;
+use tokio::time;
+use tokio::{sync::Notify, time::sleep};
 // enum Command {
 //     "getPorts"
 // }
@@ -27,25 +29,75 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     fn open_port(mut stdout: SharedWriter, cancel: Arc<Notify>, name: &str, baudrate: u32) {
+        let tstring: String = "<21020001,REQ,1234>".to_ascii_uppercase();
+        // let tstring2: String = "<22020001,REQ,1234>".to_ascii_uppercase();
         let _name = name.clone().to_owned();
+        let port = serialport::new(_name.clone(), baudrate)
+            .timeout(Duration::from_millis(700))
+            .open()
+            .expect("Failed to Open");
+
+        let mut cloned_port1 = port.try_clone().expect("Failed to clone");
+        let mut cloned_port2 = port.try_clone().expect("Failed to clone2");
         tokio::spawn(async move {
-            let mut port = serialport::new(_name, baudrate)
-                .timeout(Duration::from_millis(10))
-                .open()
-                .unwrap();
-            let mut serial_buf: Vec<u8> = vec![0; 1000];
+            let _tstring = tstring.clone();
+            // let _tstring2 = tstring2.clone();
             loop {
-                tokio::select! {
-                    _ = cancel.notified() => {break},
-                    else => match port.read(serial_buf.as_mut_slice()) {
-                        Ok(t) => {
-                            let _ = writeln!(stdout, "{}", String::from_utf8_lossy(&serial_buf[..t]));
-                        }
-                        Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
-                        Err(e) => eprintln!("{:?}", e),
+                cloned_port2
+                    .write_all(_tstring.as_bytes())
+                    .expect("Failed to write to serial port");
+                sleep(Duration::from_millis(700)).await;
+                // cloned_port2
+                //     .write_all(_tstring2.as_bytes())
+                //     .expect("Failed to write to serial port");
+                // sleep(Duration::from_millis(350)).await;
+            }
+        });
+        tokio::spawn(async move {
+            let _ = writeln!(stdout, "{} {}", &_name, &baudrate);
+
+            // let mut serial_buf: Vec<u8> = vec![0; 1000];
+
+            let mut serial_buf: Vec<u8> = vec![0; 1000];
+            println!("Receiving data on {} at {} baud:", &_name, &baudrate);
+            loop {
+                // tokio::select! {
+                //     _ = cancel.notified() => {
+                //         let _ = writeln!(stdout, "Stopped",);
+
+                //         break;
+                //     }
+                //     else=>{}
+                // };
+                match cloned_port1.read(serial_buf.as_mut_slice()) {
+                    Ok(t) => {
+                        let _ = writeln!(stdout, "{}", String::from_utf8_lossy(&serial_buf[..t]));
+                    }
+                    Err(ref e) if e.kind() == ErrorKind::TimedOut => {}
+                    Err(e) => {
+                        eprintln!("{:?}", e);
+                        break;
                     }
                 }
             }
+
+            // loop {
+            //     tokio::select! {
+            //         _ = cancel.notified() => {break},
+            //         else => match port.read(serial_buf.as_mut_slice()) {
+            //             Ok(t) => {
+            //                 let _ = writeln!(stdout, "{}", String::from_utf8_lossy(&serial_buf[..t]));
+            //             }
+            //             Err(ref e) if e.kind() == ErrorKind::TimedOut => {
+            //                 // port.write(_tstring.as_bytes()).unwrap();
+            //                 // tokio::time::sleep(time::Duration::from_secs(2)).await;
+            //                 let _ = writeln!(stdout, "TEST");
+
+            //             },
+            //             Err(e) => eprintln!("{:?}", e),
+            //         }
+            //     }
+            // }
         });
     }
 
