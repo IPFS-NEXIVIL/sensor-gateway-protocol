@@ -14,3 +14,5 @@ serialport = "4.2.2"
 tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "sync"] }
 bluest = { version = "0.6", features = ["serde"] }
 btleplug = { version = "0.11", features = ["serde"] }
+axum = "0.6.20"
+tower-http = { version = "0.4.4", features = ["cors"] }

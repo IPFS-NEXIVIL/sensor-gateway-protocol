@@ -1,5 +1,5 @@
 mod ble;
-
+mod wifi;
 use ble::btlescan;
 use futures::{pin_mut, FutureExt};
 use rustyline_async::{Readline, ReadlineError, ReadlineEvent, SharedWriter};
@@ -8,6 +8,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use wifi::startWifi;
 // use tokio::net::UdpSocket;
 use tokio::time;
 use tokio::{sync::Notify, time::sleep};
@@ -124,6 +125,9 @@ async fn main() -> anyhow::Result<()> {
                         }
                         "ble_central" =>{
                             btlescan();
+                        }
+                        "wifi" => {
+                            startWifi();
                         }
                         _=>{
                             writeln!(stdout, "").unwrap();
