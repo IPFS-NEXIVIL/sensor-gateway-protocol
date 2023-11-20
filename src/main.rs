@@ -30,8 +30,14 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     fn open_port(mut stdout: SharedWriter, cancel: Arc<Notify>, name: &str, baudrate: u32) {
-        let tstring: String = "<21020001,REQ,1234>".to_ascii_uppercase();
-        // let tstring2: String = "<22020001,REQ,1234>".to_ascii_uppercase();
+        let tstring = [
+            "<21020001,REQ,1234>".to_ascii_uppercase(),
+            "<22020001,REQ,1234>".to_ascii_uppercase(),
+            "<23020001,REQ,1234>".to_ascii_uppercase(),
+        ]
+        .into_iter()
+        .cycle();
+
         let _name = name.clone().to_owned();
         let port = serialport::new(_name.clone(), baudrate)
             .timeout(Duration::from_millis(700))
@@ -41,35 +47,21 @@ async fn main() -> anyhow::Result<()> {
         let mut cloned_port1 = port.try_clone().expect("Failed to clone");
         let mut cloned_port2 = port.try_clone().expect("Failed to clone2");
         tokio::spawn(async move {
-            let _tstring = tstring.clone();
-            // let _tstring2 = tstring2.clone();
+            let mut _tstring = tstring.clone();
+
             loop {
                 cloned_port2
-                    .write_all(_tstring.as_bytes())
+                    .write_all(_tstring.next().unwrap().as_bytes())
                     .expect("Failed to write to serial port");
-                sleep(Duration::from_millis(700)).await;
-                // cloned_port2
-                //     .write_all(_tstring2.as_bytes())
-                //     .expect("Failed to write to serial port");
-                // sleep(Duration::from_millis(350)).await;
+                sleep(Duration::from_millis(240)).await;
             }
         });
         tokio::spawn(async move {
             let _ = writeln!(stdout, "{} {}", &_name, &baudrate);
 
-            // let mut serial_buf: Vec<u8> = vec![0; 1000];
-
             let mut serial_buf: Vec<u8> = vec![0; 1000];
             println!("Receiving data on {} at {} baud:", &_name, &baudrate);
             loop {
-                // tokio::select! {
-                //     _ = cancel.notified() => {
-                //         let _ = writeln!(stdout, "Stopped",);
-
-                //         break;
-                //     }
-                //     else=>{}
-                // };
                 match cloned_port1.read(serial_buf.as_mut_slice()) {
                     Ok(t) => {
                         let _ = writeln!(stdout, "{}", String::from_utf8_lossy(&serial_buf[..t]));
@@ -81,24 +73,6 @@ async fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-
-            // loop {
-            //     tokio::select! {
-            //         _ = cancel.notified() => {break},
-            //         else => match port.read(serial_buf.as_mut_slice()) {
-            //             Ok(t) => {
-            //                 let _ = writeln!(stdout, "{}", String::from_utf8_lossy(&serial_buf[..t]));
-            //             }
-            //             Err(ref e) if e.kind() == ErrorKind::TimedOut => {
-            //                 // port.write(_tstring.as_bytes()).unwrap();
-            //                 // tokio::time::sleep(time::Duration::from_secs(2)).await;
-            //                 let _ = writeln!(stdout, "TEST");
-
-            //             },
-            //             Err(e) => eprintln!("{:?}", e),
-            //         }
-            //     }
-            // }
         });
     }
 
