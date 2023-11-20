@@ -1,17 +1,21 @@
 mod ble;
 mod wifi;
 use ble::btlescan;
-use futures::{pin_mut, FutureExt};
-use rustyline_async::{Readline, ReadlineError, ReadlineEvent, SharedWriter};
+use chrono::Utc;
+use futures::FutureExt;
+use rustyline_async::{Readline, ReadlineEvent, SharedWriter};
+use std::net::SocketAddr;
 use std::{
     io::{ErrorKind, Write},
     sync::Arc,
     time::Duration,
 };
+use tokio::fs::{File, OpenOptions};
+use tokio::io::AsyncWriteExt;
+use tokio::net::UdpSocket;
+use tokio::sync::{mpsc, Notify};
+use tokio::time::sleep;
 use wifi::startWifi;
-// use tokio::net::UdpSocket;
-use tokio::time;
-use tokio::{sync::Notify, time::sleep};
 // enum Command {
 //     "getPorts"
 // }
@@ -21,19 +25,27 @@ async fn main() -> anyhow::Result<()> {
     let cancel = Arc::new(Notify::new());
     let (mut rl, mut stdout) = Readline::new(format!("$"))?;
 
-    let opened_serial: Option<u8>;
-
     fn get_ports(mut stdout: SharedWriter) {
         let ports = serialport::available_ports().expect("No ports found!");
         for p in ports {
             writeln!(stdout, "{}", p.port_name).unwrap();
         }
     }
-    fn open_port(mut stdout: SharedWriter, cancel: Arc<Notify>, name: &str, baudrate: u32) {
+    async fn open_port(
+        mut stdout: SharedWriter,
+        cancel: Arc<Notify>,
+        name: &str,
+        baudrate: u32,
+    ) -> anyhow::Result<()> {
+        let listener = UdpSocket::bind("0.0.0.0:0".parse::<SocketAddr>().unwrap()).await?;
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        let noti = Arc::new(Notify::new());
+        let (tx_done, mut rx_done) = mpsc::unbounded_channel::<String>();
+
         let tstring = [
             "<21020001,REQ,1234>".to_ascii_uppercase(),
             "<22020001,REQ,1234>".to_ascii_uppercase(),
-            "<23020001,REQ,1234>".to_ascii_uppercase(),
+            "<24020001,REQ,1234>".to_ascii_uppercase(),
         ]
         .into_iter()
         .cycle();
@@ -46,6 +58,52 @@ async fn main() -> anyhow::Result<()> {
 
         let mut cloned_port1 = port.try_clone().expect("Failed to clone");
         let mut cloned_port2 = port.try_clone().expect("Failed to clone2");
+
+        tokio::spawn({
+            let mut path: String = format!(
+                "./shared/test-{}.txt",
+                Utc::now().format("%Y_%d_%m-%H_%M_%S")
+            );
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .open(path.clone())
+                .await?;
+
+            let cloned_tx = tx_done.clone();
+            let cloned_noti = noti.clone();
+            async move {
+                loop {
+                    tokio::select! {
+                        Some(_data) = rx.recv() =>{
+                            file.write_all(_data.as_bytes()).await.unwrap();
+                        }
+                        _=cloned_noti.notified()=>{
+                            // let _path=path.clone();
+                            let _=cloned_tx.send(path.clone());
+                            path=format!("./shared/test-{}.txt", Utc::now().format("%Y_%d_%m-%H_%M_%S"));
+                            file=OpenOptions::new()
+                            .write(true)
+                            .create(true)
+                            .open(path.clone())
+                            .await.unwrap();
+                            // break
+                        }
+                    }
+                }
+            }
+        });
+        tokio::spawn({
+            let cloned_noti = noti.clone();
+            async move {
+                loop {
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+
+                    cloned_noti.notify_one();
+                }
+            }
+        });
+
         tokio::spawn(async move {
             let mut _tstring = tstring.clone();
 
@@ -53,10 +111,11 @@ async fn main() -> anyhow::Result<()> {
                 cloned_port2
                     .write_all(_tstring.next().unwrap().as_bytes())
                     .expect("Failed to write to serial port");
-                sleep(Duration::from_millis(240)).await;
+                sleep(Duration::from_millis(300)).await;
             }
         });
         tokio::spawn(async move {
+            let cloned_tx = tx.clone();
             let _ = writeln!(stdout, "{} {}", &_name, &baudrate);
 
             let mut serial_buf: Vec<u8> = vec![0; 1000];
@@ -64,7 +123,18 @@ async fn main() -> anyhow::Result<()> {
             loop {
                 match cloned_port1.read(serial_buf.as_mut_slice()) {
                     Ok(t) => {
-                        let _ = writeln!(stdout, "{}", String::from_utf8_lossy(&serial_buf[..t]));
+                        let _ = writeln!(
+                            stdout,
+                            "{} {}",
+                            String::from_utf8_lossy(&serial_buf[..t]),
+                            Utc::now().timestamp_millis()
+                        );
+
+                        // let _ = cloned_tx.send(format!(
+                        //     "{}\t{}\n",
+                        //     String::from_utf8_lossy(&serial_buf[..t]),
+                        //     Utc::now().timestamp_millis()
+                        // ));
                     }
                     Err(ref e) if e.kind() == ErrorKind::TimedOut => {}
                     Err(e) => {
@@ -74,6 +144,23 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
         });
+
+        tokio::spawn({
+            async move {
+                loop {
+                    tokio::select! {
+                    Some(_path) = rx_done.recv()=>{
+                        // println!("{}",_path);
+                        let _ = listener.send_to(
+                                &_path.as_bytes(),
+                                "127.0.0.1:3132".parse::<SocketAddr>().unwrap(),
+                            ).await.unwrap();
+                        }
+                    }
+                }
+            }
+        });
+        Ok(())
     }
 
     tokio::task::yield_now().await;
@@ -94,7 +181,7 @@ async fn main() -> anyhow::Result<()> {
                             } else {
                                 let _port = _command.get(1).unwrap();
                                 let _baudrate:u32 = _command.get(2).unwrap_or(&"115200").trim().parse().unwrap();
-                                open_port(stdout.clone(), cancel.clone(), _port, _baudrate);
+                                open_port(stdout.clone(), cancel.clone(), _port, _baudrate).await?;
                             }
                         }
                         "ble_central" =>{

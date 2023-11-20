@@ -11,8 +11,15 @@ clap = "4.4.5"
 futures = "0.3.28"
 rustyline-async = "0.4.0"
 serialport = "4.2.2"
-tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread", "sync"] }
+tokio = { version = "1.32.0", features = [
+    "macros",
+    "rt-multi-thread",
+    "sync",
+    "fs",
+    "io-util",
+] }
 bluest = { version = "0.6", features = ["serde"] }
 btleplug = { version = "0.11", features = ["serde"] }
 axum = "0.6.20"
 tower-http = { version = "0.4.4", features = ["cors"] }
+chrono = "0.4.31"
