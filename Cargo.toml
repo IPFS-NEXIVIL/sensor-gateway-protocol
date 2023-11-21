@@ -7,19 +7,17 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-clap = "4.4.5"
 futures = "0.3.28"
 rustyline-async = "0.4.0"
-serialport = "4.2.2"
-tokio = { version = "1.32.0", features = [
-    "macros",
-    "rt-multi-thread",
-    "sync",
-    "fs",
-    "io-util",
-] }
+tokio = { version = "1.32.0", features = ["full"] }
+tokio-stream = "0.1"
 bluest = { version = "0.6", features = ["serde"] }
 btleplug = { version = "0.11", features = ["serde"] }
 axum = "0.6.20"
 tower-http = { version = "0.4.4", features = ["cors"] }
 chrono = "0.4.31"
+clap = { version = "4", features = ["derive"] }
+rand = "0.8.5"
+serialport = "4.2.2"
+regex = "1.10.2"
+
